@@ -12,6 +12,60 @@ namespace Crypto
 {
     using BinaryArray = std::vector<uint8_t>;
 
+    struct EllipticCurvePoint
+    {
+        EllipticCurvePoint() {}
+
+        EllipticCurvePoint(std::initializer_list<uint8_t> input)
+        {
+            std::copy(input.begin(), input.end(), std::begin(data));
+        }
+
+        EllipticCurvePoint(const uint8_t input[32])
+        {
+            std::copy(input, input + 32, std::begin(data));
+        }
+
+        bool operator==(const EllipticCurvePoint &other) const
+        {
+            return std::equal(std::begin(data), std::end(data), std::begin(other.data));
+        }
+
+        bool operator!=(const EllipticCurvePoint &other) const
+        {
+            return !(*this == other);
+        }
+
+        uint8_t data[32];
+    };
+
+    struct EllipticCurveScalar
+    {
+        EllipticCurveScalar() {}
+
+        EllipticCurveScalar(std::initializer_list<uint8_t> input)
+        {
+            std::copy(input.begin(), input.end(), std::begin(data));
+        }
+
+        EllipticCurveScalar(const uint8_t input[32])
+        {
+            std::copy(input, input + 32, std::begin(data));
+        }
+
+        bool operator==(const EllipticCurveScalar &other) const
+        {
+            return std::equal(std::begin(data), std::end(data), std::begin(other.data));
+        }
+
+        bool operator!=(const EllipticCurveScalar &other) const
+        {
+            return !(*this == other);
+        }
+
+        uint8_t data[32];
+    };
+
     struct Hash
     {
         /* Can't have constructors here, because it violates std::is_pod<>
@@ -165,6 +219,16 @@ namespace Crypto
     };
 
     /* For boost hash_value */
+    inline size_t hash_value(const EllipticCurvePoint &ep)
+    {
+        return reinterpret_cast<const size_t &>(ep);
+    }
+
+    inline size_t hash_value(const EllipticCurveScalar &es)
+    {
+        return reinterpret_cast<const size_t &>(es);
+    }
+
     inline size_t hash_value(const Hash &hash)
     {
         return reinterpret_cast<const size_t &>(hash);
@@ -194,6 +258,22 @@ namespace Crypto
 namespace std
 {
     /* For using in std::unordered_* containers */
+    template<> struct hash<Crypto::EllipticCurvePoint>
+    {
+        size_t operator()(const Crypto::EllipticCurvePoint &ep) const
+        {
+            return reinterpret_cast<const size_t &>(ep);
+        }
+    };
+
+    template<> struct hash<Crypto::EllipticCurveScalar>
+    {
+        size_t operator()(const Crypto::EllipticCurveScalar &es) const
+        {
+            return reinterpret_cast<const size_t &>(es);
+        }
+    };
+
     template<> struct hash<Crypto::Hash>
     {
         size_t operator()(const Crypto::Hash &hash) const
@@ -243,6 +323,18 @@ namespace std
     };
 
     /* Overloading the << operator */
+    inline ostream &operator<<(ostream &os, const Crypto::EllipticCurvePoint &ep)
+    {
+        os << Common::podToHex(ep);
+        return os;
+    }
+
+    inline ostream &operator<<(ostream &os, const Crypto::EllipticCurveScalar &es)
+    {
+        os << Common::podToHex(es);
+        return os;
+    }
+
     inline ostream &operator<<(ostream &os, const Crypto::Hash &hash)
     {
         os << Common::podToHex(hash);

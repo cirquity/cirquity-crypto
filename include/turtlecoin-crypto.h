@@ -19,6 +19,7 @@
 #endif
 
 #include <crypto.h>
+#include <multisig.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -120,10 +121,55 @@ extern "C"
             static std::string scReduce32(const std::string data);
             static std::string hashToScalar(const std::string hash);
             static bool generateDeterministicSubwalletKeys(
-              const std::string basePrivateKey,
-              const uint64_t walletIndex,
-              std::string &privateKey,
-              std::string &publicKey);
+                const std::string basePrivateKey,
+                const uint64_t walletIndex,
+                std::string &privateKey,
+                std::string &publicKey);
+            static bool prepareRingSignatures(
+                const std::string prefixHash,
+                const std::string keyImage,
+                const std::vector<std::string> publicKeys,
+                uint64_t realOutput,
+                std::vector<std::string> &signatures,
+                std::string &k);
+            static bool prepareRingSignatures(
+                const std::string prefixHash,
+                const std::string keyImage,
+                const std::vector<std::string> publicKeys,
+                uint64_t realOutput,
+                const std::string k,
+                std::vector<std::string> &signatures);
+            static bool completeRingSignatures(
+                const std::string transactionSecretKey,
+                uint64_t realOutput,
+                const std::string &k,
+                std::vector<std::string> &signatures);
+
+            /* Multisig Methods */
+            static void generate_n_n(
+                const std::string &ourPublicSpendKey,
+                const std::string &ourPrivateViewKey,
+                const std::vector<std::string> &publicSpendKeys,
+                const std::vector<std::string> &secretSpendKeys,
+                std::string &sharedPublicSpendKey,
+                std::string &sharedPrivateViewKey);
+
+            static std::string
+                generatePartialSigningKey(const std::string &signature, const std::string &privateSpendKey);
+
+            static std::string restoreKeyImage(
+                const std::string &publicEphemeral,
+                const std::string &derivation,
+                const size_t output_index,
+                const std::vector<std::string> &partialKeyImages);
+
+            static bool restoreRingSignatures(
+                const std::string &derivation,
+                const size_t output_index,
+                const std::vector<std::string> &partialSigningKeys,
+                const uint64_t realOutput,
+                const std::string &k,
+                std::vector<std::string> &signatures);
         };
     } // namespace Core
 

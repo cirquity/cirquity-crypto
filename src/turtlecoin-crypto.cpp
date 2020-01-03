@@ -761,8 +761,7 @@ namespace Core
         const std::string basePrivateKey,
         const uint64_t walletIndex,
         std::string &privateKey,
-        std::string &publicKey
-    )
+        std::string &publicKey)
     {
         Crypto::SecretKey _basePrivateKey;
 
@@ -782,6 +781,301 @@ namespace Core
         }
 
         return false;
+    }
+
+    std::string Cryptography::restoreKeyImage(
+        const std::string &publicEphemeral,
+        const std::string &derivation,
+        const size_t output_index,
+        const std::vector<std::string> &partialKeyImages)
+    {
+        Crypto::PublicKey _publicEphemeral;
+
+        Common::podFromHex(publicEphemeral, _publicEphemeral);
+
+        Crypto::KeyDerivation _derivation;
+
+        Common::podFromHex(derivation, _derivation);
+
+        std::vector<Crypto::KeyImage> _partialKeyImages;
+
+        for (auto key : partialKeyImages)
+        {
+            Crypto::KeyImage _key;
+
+            Common::podFromHex(key, _key);
+
+            _partialKeyImages.push_back(_key);
+        }
+
+        Crypto::KeyImage _keyImage =
+            Crypto::Multisig::restore_key_image(_publicEphemeral, _derivation, output_index, _partialKeyImages);
+
+        return Common::podToHex(_keyImage);
+    }
+
+    bool Cryptography::restoreRingSignatures(
+        const std::string &derivation,
+        const size_t output_index,
+        const std::vector<std::string> &partialSigningKeys,
+        const uint64_t realOutput,
+        const std::string &k,
+        std::vector<std::string> &signatures)
+    {
+        Crypto::KeyDerivation _derivation;
+
+        Common::podFromHex(derivation, _derivation);
+
+        std::vector<Crypto::SecretKey> _partialSigningKeys;
+
+        for (const auto key : partialSigningKeys)
+        {
+            Crypto::SecretKey _key;
+
+            Common::podFromHex(key, _key);
+
+            _partialSigningKeys.push_back(_key);
+        }
+
+        Crypto::EllipticCurveScalar _k;
+
+        Common::podFromHex(k, _k);
+
+        std::vector<Crypto::Signature> _signatures;
+
+        for (const auto sig : signatures)
+        {
+            Crypto::Signature _sig;
+
+            Common::podFromHex(sig, _sig);
+
+            _signatures.push_back(_sig);
+        }
+
+        const auto success = Crypto::Multisig::restore_ring_signatures(
+            _derivation, output_index, _partialSigningKeys, realOutput, _k, _signatures);
+
+        if (success)
+        {
+            signatures.clear();
+
+            for (const auto sig : _signatures)
+            {
+                signatures.push_back(Common::toHex(&sig, sizeof(sig)));
+            }
+        }
+
+        return success;
+    }
+
+    std::string
+        Cryptography::generatePartialSigningKey(const std::string &signature, const std::string &privateSpendKey)
+    {
+        Crypto::Signature _signature;
+
+        Common::podFromHex(signature, _signature);
+
+        Crypto::SecretKey _privateSpendKey;
+
+        Common::podFromHex(privateSpendKey, _privateSpendKey);
+
+        Crypto::SecretKey _key = Crypto::Multisig::generate_partial_signing_key(_signature, _privateSpendKey);
+
+        return Common::podToHex(_key);
+    }
+
+    bool Cryptography::prepareRingSignatures(
+        const std::string prefixHash,
+        const std::string keyImage,
+        const std::vector<std::string> publicKeys,
+        uint64_t realOutput,
+        std::vector<std::string> &signatures,
+        std::string &k)
+    {
+        Crypto::Hash _prefixHash;
+
+        Common::podFromHex(prefixHash, _prefixHash);
+
+        Crypto::KeyImage _keyImage;
+
+        Common::podFromHex(keyImage, _keyImage);
+
+        std::vector<Crypto::PublicKey> _publicKeys;
+
+        for (const auto key : publicKeys)
+        {
+            Crypto::PublicKey _key;
+
+            Common::podFromHex(key, _key);
+
+            _publicKeys.push_back(_key);
+        }
+
+        std::vector<Crypto::Signature> _signatures;
+
+        Crypto::EllipticCurveScalar _k;
+
+        const auto success =
+            Crypto::crypto_ops::prepareRingSignatures(_prefixHash, _keyImage, _publicKeys, realOutput, _signatures, _k);
+
+        if (success)
+        {
+            signatures.clear();
+
+            for (const auto _sig : _signatures)
+            {
+                signatures.push_back(Common::toHex(&_sig, sizeof(_sig)));
+            }
+
+            k = Common::podToHex(_k);
+        }
+
+        return success;
+    }
+
+    bool Cryptography::prepareRingSignatures(
+        const std::string prefixHash,
+        const std::string keyImage,
+        const std::vector<std::string> publicKeys,
+        uint64_t realOutput,
+        const std::string k,
+        std::vector<std::string> &signatures)
+    {
+        Crypto::Hash _prefixHash;
+
+        Common::podFromHex(prefixHash, _prefixHash);
+
+        Crypto::KeyImage _keyImage;
+
+        Common::podFromHex(keyImage, _keyImage);
+
+        std::vector<Crypto::PublicKey> _publicKeys;
+
+        for (const auto key : publicKeys)
+        {
+            Crypto::PublicKey _key;
+
+            Common::podFromHex(key, _key);
+
+            _publicKeys.push_back(_key);
+        }
+
+        std::vector<Crypto::Signature> _signatures;
+
+        Crypto::EllipticCurveScalar _k;
+
+        Common::podFromHex(k, _k);
+
+        const auto success =
+            Crypto::crypto_ops::prepareRingSignatures(_prefixHash, _keyImage, _publicKeys, realOutput, _k, _signatures);
+
+        if (success)
+        {
+            signatures.clear();
+
+            for (const auto _sig : _signatures)
+            {
+                signatures.push_back(Common::toHex(&_sig, sizeof(_sig)));
+            }
+        }
+
+        return success;
+    }
+
+    bool Cryptography::completeRingSignatures(
+        const std::string transactionSecretKey,
+        uint64_t realOutput,
+        const std::string &k,
+        std::vector<std::string> &signatures)
+    {
+        Crypto::SecretKey _transactionSecretKey;
+
+        Common::podFromHex(transactionSecretKey, _transactionSecretKey);
+
+        Crypto::EllipticCurveScalar _k;
+
+        Common::podFromHex(k, _k);
+
+        std::vector<Crypto::Signature> _signatures;
+
+        for (const auto sig : signatures)
+        {
+            Crypto::Signature _sig;
+
+            Common::podFromHex(sig, _sig);
+
+            _signatures.push_back(_sig);
+        }
+
+        const auto success =
+            Crypto::crypto_ops::completeRingSignatures(_transactionSecretKey, realOutput, _k, _signatures);
+
+        if (success)
+        {
+            signatures.clear();
+
+            for (const auto sig : _signatures)
+            {
+                signatures.push_back(Common::toHex(&sig, sizeof(sig)));
+            }
+        }
+
+        return success;
+    }
+
+    void Cryptography::generate_n_n(
+        const std::string &ourPublicSpendKey,
+        const std::string &ourPrivateViewKey,
+        const std::vector<std::string> &publicSpendKeys,
+        const std::vector<std::string> &secretSpendKeys,
+        std::string &sharedPublicSpendKey,
+        std::string &sharedPrivateViewKey)
+    {
+        Crypto::PublicKey _ourPublicSpendKey;
+
+        Common::podFromHex(ourPublicSpendKey, _ourPublicSpendKey);
+
+        Crypto::SecretKey _ourSecretViewKey;
+
+        Common::podFromHex(ourPrivateViewKey, _ourSecretViewKey);
+
+        std::vector<Crypto::PublicKey> _publicSpendKeys;
+
+        for (const auto key : publicSpendKeys)
+        {
+            Crypto::PublicKey _key;
+
+            Common::podFromHex(key, _key);
+
+            _publicSpendKeys.push_back(_key);
+        }
+
+        std::vector<Crypto::SecretKey> _secretSpendKeys;
+
+        for (const auto key : secretSpendKeys)
+        {
+            Crypto::SecretKey _key;
+
+            Common::podFromHex(key, _key);
+
+            _secretSpendKeys.push_back(_key);
+        }
+
+        Crypto::PublicKey _sharedPublicSpendKey;
+
+        Crypto::SecretKey _sharedPrivateViewKey;
+
+        Crypto::Multisig::generate_n_n(
+            _ourPublicSpendKey,
+            _ourSecretViewKey,
+            _publicSpendKeys,
+            _secretSpendKeys,
+            _sharedPublicSpendKey,
+            _sharedPrivateViewKey);
+
+        sharedPublicSpendKey = Common::podToHex(_sharedPublicSpendKey);
+
+        sharedPrivateViewKey = Common::podToHex(_sharedPrivateViewKey);
     }
 } // namespace Core
 
@@ -940,7 +1234,11 @@ inline int
     return success;
 }
 
-inline bool generateDeterministicSubwalletKeys(const char *basePrivateKey, const uint64_t walletIndex, char *&privateKey, char *&publicKey)
+inline bool generateDeterministicSubwalletKeys(
+    const char *basePrivateKey,
+    const uint64_t walletIndex,
+    char *&privateKey,
+    char *&publicKey)
 {
     std::string _privateKey;
 
@@ -1214,7 +1512,11 @@ extern "C"
         output = strdup(Core::Cryptography::hashToScalar(hash).c_str());
     }
 
-    EXPORTDLL int _generateDeterministicSubwalletKeys(const char *basePrivateKey, const uint64_t walletIndex, char *&privateKey, char *&publicKey)
+    EXPORTDLL int _generateDeterministicSubwalletKeys(
+        const char *basePrivateKey,
+        const uint64_t walletIndex,
+        char *&privateKey,
+        char *&publicKey)
     {
         return generateDeterministicSubwalletKeys(basePrivateKey, walletIndex, privateKey, publicKey);
     }

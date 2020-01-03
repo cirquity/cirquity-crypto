@@ -15,6 +15,18 @@ struct Keys
     std::string secretKey;
 };
 
+struct MultiSigKeys
+{
+    std::string publicSpendKey;
+    std::string secretViewKey;
+};
+
+struct PreparedSignatures
+{
+    std::vector<std::string> signatures;
+    std::string key;
+};
+
 /* Most of the redefintions below are the result of the methods returning a bool instead
    of the value we need or issues with method signatures having a uint64_t */
 
@@ -46,6 +58,49 @@ std::vector<std::string> generateRingSignatures(
         prefixHash, keyImage, publicKeys, transactionSecretKey, realOutputIndex, signatures);
 
     return signatures;
+}
+
+PreparedSignatures prepareRingSignatures(
+    const std::string prefixHash,
+    const std::string keyImage,
+    const std::vector<std::string> publicKeys,
+    const int realOutputIndex)
+{
+    std::vector<std::string> signatures;
+
+    std::string k;
+
+    bool success =
+        Core::Cryptography::prepareRingSignatures(prefixHash, keyImage, publicKeys, realOutputIndex, signatures, k);
+
+    PreparedSignatures result;
+
+    result.signatures = signatures;
+
+    result.key = k;
+
+    return result;
+}
+
+PreparedSignatures prepareRingSignaturesK(
+    const std::string prefixHash,
+    const std::string keyImage,
+    const std::vector<std::string> publicKeys,
+    const int realOutputIndex,
+    const std::string k)
+{
+    std::vector<std::string> signatures;
+
+    bool success =
+        Core::Cryptography::prepareRingSignatures(prefixHash, keyImage, publicKeys, realOutputIndex, k, signatures);
+
+    PreparedSignatures result;
+
+    result.signatures = signatures;
+
+    result.key = k;
+
+    return result;
 }
 
 Keys generateViewKeysFromPrivateSpendKey(const std::string secretKey)
@@ -136,6 +191,73 @@ std::string underivePublicKey(const std::string derivation, const size_t outputI
     return publicKey;
 }
 
+std::vector<std::string> completeRingSignatures(
+    const std::string transactionSecretKey,
+    const int realOutputIndex,
+    const std::string k,
+    const std::vector<std::string> signatures)
+{
+    std::vector<std::string> completeSignatures;
+
+    for (auto sig : signatures)
+    {
+        completeSignatures.push_back(sig);
+    }
+
+    bool success =
+        Core::Cryptography::completeRingSignatures(transactionSecretKey, realOutputIndex, k, completeSignatures);
+
+    return completeSignatures;
+}
+
+MultiSigKeys generateNN(
+    const std::string ourPublicSpendKey,
+    const std::string ourPrivateViewKey,
+    const std::vector<std::string> publicSpendKeys,
+    const std::vector<std::string> secretViewKeys)
+{
+    std::string sharedPublicSpendKey;
+
+    std::string sharedSecretViewKey;
+
+    Core::Cryptography::generate_n_n(
+        ourPublicSpendKey,
+        ourPrivateViewKey,
+        publicSpendKeys,
+        secretViewKeys,
+        sharedPublicSpendKey,
+        sharedSecretViewKey);
+
+    MultiSigKeys keys;
+
+    keys.publicSpendKey = sharedPublicSpendKey;
+
+    keys.secretViewKey = sharedSecretViewKey;
+
+    return keys;
+}
+
+std::vector<std::string> restoreRingSignatures(
+    const std::string derivation,
+    const size_t output_index,
+    const std::vector<std::string> partialSigningKeys,
+    const int realOutput,
+    const std::string k,
+    const std::vector<std::string> signatures)
+{
+    std::vector<std::string> completeSignatures;
+
+    for (auto sig : signatures)
+    {
+        completeSignatures.push_back(sig);
+    }
+
+    bool success = Core::Cryptography::restoreRingSignatures(
+        derivation, output_index, partialSigningKeys, realOutput, k, completeSignatures);
+
+    return completeSignatures;
+}
+
 EMSCRIPTEN_BINDINGS(signatures)
 {
     function("cn_fast_hash", &Core::Cryptography::cn_fast_hash);
@@ -176,6 +298,9 @@ EMSCRIPTEN_BINDINGS(signatures)
     function("tree_hash_from_branch", &Core::Cryptography::tree_hash_from_branch);
 
     function("generateRingSignatures", &generateRingSignatures);
+    function("prepareRingSignatures", &prepareRingSignatures);
+    function("prepareRingSignaturesK", &prepareRingSignaturesK);
+    function("completeRingSignatures", &completeRingSignatures);
     function("checkRingSignature", &Core::Cryptography::checkRingSignature);
     function(
         "generatePrivateViewKeyFromPrivateSpendKey", &Core::Cryptography::generatePrivateViewKeyFromPrivateSpendKey);
@@ -195,8 +320,24 @@ EMSCRIPTEN_BINDINGS(signatures)
     function("hashToEllipticCurve", &Core::Cryptography::hashToEllipticCurve);
     function("scReduce32", &Core::Cryptography::scReduce32);
     function("hashToScalar", &Core::Cryptography::hashToScalar);
+    function("restoreKeyImage", &Core::Cryptography::restoreKeyImage);
+
+    /* Multisig Methods */
+
+    function("generateNN", &generateNN);
+    function("generatePartialSigningKey", &Core::Cryptography::generatePartialSigningKey);
+    function("restoreKeyImage", &Core::Cryptography::restoreKeyImage);
+    function("restoreRingSignatures", &restoreRingSignatures);
 
     register_vector<std::string>("VectorString");
 
     value_object<Keys>("Keys").field("secretKey", &Keys::secretKey).field("publicKey", &Keys::publicKey);
+
+    value_object<MultiSigKeys>("Keys")
+        .field("secretViewKey", &MultiSigKeys::secretViewKey)
+        .field("publicSpendKey", &MultiSigKeys::publicSpendKey);
+
+    value_object<PreparedSignatures>("Keys")
+        .field("signatures", &PreparedSignatures::signatures)
+        .field("key", &PreparedSignatures::key);
 }
